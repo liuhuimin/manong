@@ -10,8 +10,6 @@ function is_get(){
  * which action is requested
  */
 function action(){
-	// if(is_get())
-	// return 'index';
 	return isset($_GET['a']) ? $_GET['a']:'index';
 }
 
@@ -133,11 +131,12 @@ function add(){
 		'desc'=>trim($_GET['desc']),
 		'href'=>trim($_GET['href']),
 		'number'=>trim($_GET['number']),
-		'category'=>strtoupper($cate),
+		'category'=>mb_strtoupper($cate, 'utf-8'),
 		'hash'=>md5(trim($_GET['href'])),
 		'addtime'=>time(),
 		'ctime'=>time(),
 	];
+	
 	if(get_db()->add($data)){
 		ajax_return(['res'=>1,'msg'=>'success','cate'=>$data['category']]);
 	}else{
@@ -168,7 +167,14 @@ function render(){
 码农周刊官方网址 [http://weekly.manong.io/](http://weekly.manong.io/)  
 一些不熟悉的领域分类可能不准确，请见谅  
 15期为图书推荐，请直接浏览[原地址](http://weekly.manong.io/issues/15)  
+56期为14年最受欢迎列表，请直接浏览[原地址](http://weekly.manong.io/issues/56)  
 现在已整理到第{$current}期。  
+
+编程之外栏目里的文章和技术无直接关系，移到了talks.md文件里。 
+readme.md现在过大，在项目首页无法显示完整，点击进入文件中即可。
+
+号外：[@lcepy](https://github.com/icepy)  同学基于本项目制作了ios端的阅读app《猿已阅》，并已开源，大家可以移步[这里](https://github.com/icepy/manong-reading)参观一下。
+
 ";
 
 	// category index
@@ -180,21 +186,31 @@ function render(){
 		$content.="\n";
 		$content.="##索引\n";
 		foreach ($categories as $val) {
-			$content.="[{$val}](#{$val})  \n";
+			if($val == '编程之外'){
+				$content.="[{$val}](talks.md)  \n";
+			}else{
+				$content.="[{$val}](#{$val})  \n";
+			}
 		}
 	}
 
 	$current_cate='';
+	$talks = '';
 	foreach ($data as $val) {
+		if($val['category'] == '编程之外'){
+			$talks .= "[{$val['title']}]({$val['href']})  \n";
+			continue;
+		}
 		if($val['category'] != $current_cate){
 			$content.="\n";
 			$content.="<a name=\"{$val['category']}\"></a>\n";
-			$content.="##{$val['category']}\n";
+			$content.="##".str_replace('#', '\# ', $val['category'])."\n";
 			$current_cate=$val['category'];
 		}
 		$content.="[{$val['title']}]({$val['href']})  \n";
 	}
 	$rs=file_put_contents('./readme.md', $content);
+	file_put_contents('./talks.md', $talks);
 	if($rs){
 		ajax_return(['res'=>1]);
 	}else{
@@ -252,7 +268,11 @@ class manongdb{
 		$url=$this->issue_url.$number;
 		$content=file_get_contents($url);
 		$content=str_replace(["\r","\n"], '', $content);
-		$pattern='/<h4><a target="_blank" href="(.*?)">(.*?)<\/a>&nbsp;&nbsp;<\/h4>.*?<p>(.*?)<\/p>/';
+		if($number >= 91){
+			$pattern = '/<h4><a target="_blank" href="(.*?)">(.*?)<\/a>&nbsp;&nbsp;(?:<a target="_blank".*?<\/a>)?<\/h4>.*?<p>(.*?)<\/p>/';
+		}else{
+			$pattern='/<h4><a target="_blank" href="(.*?)">(.*?)<\/a>&nbsp;&nbsp;<\/h4>.*?<p>(.*?)<\/p>/';
+		}
 		$rs=preg_match_all($pattern, $content, $matches);
 		if($rs){
 			mylog('crawl finished.start parsing');
@@ -334,7 +354,8 @@ class manongdb{
 	 * add an item to db or update it if exists
 	 */
 	function add($data){
-		$rs=$this->pdo->exec($this->arr2sql('issue',$data));
+		$sql = $this->arr2sql('issue',$data);
+		$rs=$this->pdo->exec($sql);
 		if($rs){
 			return $this->pdo->lastInsertId();
 		}
